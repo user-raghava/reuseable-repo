@@ -11,7 +11,7 @@ on:
         required: false
         type: string
 
-      agents: # input for agents
+      agent: # input for agents
             description: 'List of agents to run the job on'
             required: false
             default: 'ubuntu-latest'
@@ -24,7 +24,7 @@ permissions:  # Define permissions for the workflow
 
 jobs:
     manual:   # Job name (identifier for this job)
-        runs-on: ${{ inputs.agents }}  # Use the agent specified in the workflow call input
+        runs-on: ${{ inputs.agent }}  # Use the agent specified in the workflow call input
 
         steps:  # Steps run sequentially inside the job
           - uses: actions/checkout@v5    # Step 1: Check out repository code into the runner
