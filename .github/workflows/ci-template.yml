@@ -1,79 +1,49 @@
-name: Maven Reuseable CI - Spring PetClinic
+---
+# .github/workflows/ci-template.yml
+name: CI Template
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  # Allow manual trigger from GitHub UI
-  workflow_dispatch:        
+  workflow_call:   # makes it reusable
+    inputs: # Define inputs for the reusable workflow
+      java-version:
+        description: 'Java version to use'
+        default: '17'
+        required: false
+        type: string
 
-permissions:
-  contents: read
-  checks: write
+      agent: # input for agents
+            description: 'List of agents to run the job on'
+            required: false
+            default: 'ubuntu-latest'
+            type: string # string, boolean, or environment
+
+permissions:  # Define permissions for the workflow
+  contents: read  # Read access to repository contents
+  checks: write   # Write access to checks
+  pull-requests: write  # Write access to pull requests
 
 jobs:
-  build-test:
-    runs-on: ubuntu-latest
+    manual:   # Job name (identifier for this job)
+        runs-on: ${{ inputs.agent }}  # Use the agent specified in the workflow call input
 
-    steps:
-      # 1. Checkout
-      - name: Checkout source
-        uses: actions/checkout@v4
+        steps:  # Steps run sequentially inside the job
+          - uses: actions/checkout@v5    # Step 1: Check out repository code into the runner
+          - uses: actions/setup-java@v5  # Step 2: Set up Java environment
+            with:
+                distribution: 'temurin'  # Use Eclipse Temurin distribution
+                java-version: ${{ inputs.java-version }}   # Set Java version to 21
+                cache: ''   # Enable Maven dependency caching
 
-      # 2. Setup Java
-      - name: Setup JDK
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: maven
+          - name: build package
+            run: mvn ${{ vars.GOAL  }}  # Step 3: Run Maven command specified in repository variable 'GOAL'
+          - name: publish test results  # Step 4: Publish test results using a third-party action
+            uses: EnricoMi/publish-unit-test-result-action@v2  
+            with:  
+              files: |
+                **/target/surefire-reports/*.xml
 
-      # 3. Build & run tests
-      - name: Build with Maven
-        run: mvn clean verify
-
-      # 4. Publish JUnit test results to GitHub Checks
-      - name: Publish Test Results
-        if: always()
-        uses: dorny/test-reporter@v1
-        with:
-          name: Maven Unit Tests
-          path: target/surefire-reports/*.xml
-          reporter: java-junit
-          fail-on-error: true
-
-      # 5. Upload raw test report files
-      - name: Upload JUnit XML
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: junit-test-results
-          path: target/surefire-reports/
-
-      # 6. Upload built JAR
-      - name: Upload Artifact
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: spring-petclinic-jar
-          path: target/*.jar
-
-    #   # 7. Telegram notification for test result
-    #   - name: Notify Telegram - Test Status
-    #     if: always()
-    #     run: |
-    #       STATUS="${{ job.status }}"
-    #       MESSAGE="🧪 Spring PetClinic CI\nTest Status: ${STATUS}\nRepo: ${{ github.repository }}\nRun: ${{ github.run_id }}"
-    #       curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-    #         -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
-    #         -d text="$MESSAGE"
-
-    #   # 8. Telegram notification for artifact upload
-    #   - name: Notify Telegram - Artifact Uploaded
-    #     if: success()
-    #     run: |
-    #       MESSAGE="📦 Artifact uploaded successfully\nRepo: ${{ github.repository }}"
-    #       curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-    #         -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
-    #         -d text="$MESSAGE"
+          - name: Uploading packaged jar files  # Step 5: Upload packaged JAR files as workflow artifacts
+            uses: actions/upload-artifact@v4   # Use GitHub's upload-artifact action
+            with:
+              name: spring-petclinic.jar  # Name of the artifact
+              path: '**/target/*.jar'  # Path to the JAR files to upload
