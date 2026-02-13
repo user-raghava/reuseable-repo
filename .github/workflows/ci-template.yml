@@ -1,49 +1,72 @@
----
-# .github/workflows/ci-template.yml
-name: CI Template
+name: Maven CI - Reusable
 
 on:
-  workflow_call:   # makes it reusable
-    inputs: # Define inputs for the reusable workflow
+  workflow_call:
+    inputs:
       java-version:
-        description: 'Java version to use'
-        default: '17'
+        description: "JDK version"
         required: false
+        default: "17"
         type: string
+      artifact-name:
+        description: "Name for uploaded JAR artifact"
+        required: false
+        default: "app-jar"
+        type: string
+      agent: 
+        description: 'List of agents to run the job on'
+        required: false
+        default: 'ubuntu-latest'
+        type: string # string, boolean, or environment
 
-      agent: # input for agents
-            description: 'List of agents to run the job on'
-            required: false
-            default: 'ubuntu-latest'
-            type: string # string, boolean, or environment
-
-permissions:  # Define permissions for the workflow
-  contents: read  # Read access to repository contents
-  checks: write   # Write access to checks
-  pull-requests: write  # Write access to pull requests
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write  
 
 jobs:
-    manual:   # Job name (identifier for this job)
-        runs-on: ${{ inputs.agent }}  # Use the agent specified in the workflow call input
+  build-test:
+    runs-on: ${{ inputs.agent }}
 
-        steps:  # Steps run sequentially inside the job
-          - uses: actions/checkout@v5    # Step 1: Check out repository code into the runner
-          - uses: actions/setup-java@v5  # Step 2: Set up Java environment
-            with:
-                distribution: 'temurin'  # Use Eclipse Temurin distribution
-                java-version: ${{ inputs.java-version }}   # Set Java version to 21
-                cache: ''   # Enable Maven dependency caching
+    steps:
+      # 1. Checkout
+      - name: Checkout source
+        uses: actions/checkout@v4
 
-          - name: build package
-            run: mvn ${{ vars.GOAL  }}  # Step 3: Run Maven command specified in repository variable 'GOAL'
-          - name: publish test results  # Step 4: Publish test results using a third-party action
-            uses: EnricoMi/publish-unit-test-result-action@v2  
-            with:  
-              files: |
-                **/target/surefire-reports/*.xml
+      # 2. Setup Java
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.java-version }}
+          distribution: temurin
+          cache: maven
 
-          - name: Uploading packaged jar files  # Step 5: Upload packaged JAR files as workflow artifacts
-            uses: actions/upload-artifact@v4   # Use GitHub's upload-artifact action
-            with:
-              name: spring-petclinic.jar  # Name of the artifact
-              path: '**/target/*.jar'  # Path to the JAR files to upload
+      # 3. Build & run tests
+      - name: Build with Maven
+        run: mvn clean verify
+
+      # 4. Publish JUnit test results
+      - name: Publish Test Results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Maven Unit Tests
+          path: target/surefire-reports/*.xml
+          reporter: java-junit
+          fail-on-error: true
+
+      # 5. Upload raw test reports
+      - name: Upload JUnit XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-test-results
+          path: target/surefire-reports/
+
+      # 6. Upload built JAR
+      - name: Upload Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: target/*.jar
